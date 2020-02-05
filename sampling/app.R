@@ -1,7 +1,7 @@
 library(shinythemes)
 
 ui <- fluidPage(
-  theme = shinytheme("flatly"),
+  #theme = shinytheme("flatly"),
   #shinythemes::themeSelector(), # <--- Add this somewhere in the UI
   titlePanel("Simple Random Sampling Simulation"),
   navlistPanel(
