@@ -1,0 +1,109 @@
+---
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T)
+```
+
+
+```{r, eval=FALSE}
+getwd()
+soil = read.csv("soilresptemp.txt", sep = " ")
+
+Rsoil = soil$Rsoil
+Tsoil = soil$Tsoil
+
+Rsoil_rmv = Rsoil[Rsoil > 0]
+Tsoil_rmv = Tsoil[Rsoil > 0]
+
+getest = function(x, y, beta_ini, ..., eps = 10^(-10)){
+  beta = beta_ini
+  iter = 0
+  
+  while(TRUE){
+    iter = iter + 1
+    eta = x %*% beta
+    mu = exp(eta)
+    D = c(mu) * x
+    
+    #mu = ifelse(abs(mu) > eps, mu, eps)
+    #mu = ifelse(abs(1 - mu) > eps, mu, 1 - eps)
+    
+    V_inv = diag(1 / c(mu))
+    z = y - mu
+    
+    beta_2 = beta + solve(t(D) %*% V_inv %*% D, t(D) %*% V_inv %*% z)
+    #xi_2 = solve(t(x) %*% W %*% x, t(x) %*% W %*% (x %*% xi + z))
+    if(any(is.na(beta_2))){
+      stop("Fatal error:: NA's generated")
+    }
+    
+    if(norm(beta - beta_2) < 10^(-10)){
+      beta = beta_2
+      break
+    }
+    else{
+      beta =  beta_2
+    }
+  }
+  eta = x %*% beta
+  mu = exp(eta)
+  D = c(mu) * x
+  V_inv = diag(1 / c(mu))
+  phi = sum((y - mu)^2 / mu) / (length(mu) - 2)
+  
+  return(list(beta = beta, phi = phi, cov = solve(t(D) %*% V_inv %*% D) * phi, iteration = iter))
+}
+
+quasilik = function(beta, x, y){
+  eta = x %*% beta
+  mu = exp(eta)
+  return(sum(y * log(mu / y) - mu + y))
+}
+
+quasilik_neg = function(beta, x, y){
+  return(-quasilik(beta, x, y))
+}
+
+#Estimates
+x = cbind(1, Tsoil_rmv)
+y = Rsoil_rmv
+
+model_ini = glm(Rsoil_rmv ~ Tsoil_rmv, family = Gamma(link = "log"))
+s_model_ini <- summary(model_ini)
+beta_ini = model_ini$coefficients
+#confint(model_ini, trace = TRUE)
+moe = qnorm(1 - 0.025) *sqrt(diag(vcov(model_ini)))
+cbind(beta_ini - moe, beta_ini, beta_ini + moe)
+
+res = getest(x, y, beta_ini)
+beta = res$beta
+
+res2 = optim(par = beta_ini, fn = quasilik_neg, x = x, y = y)
+beta2 = res2$par
+
+moe = qnorm(1 - 0.025) * sqrt(diag(res$cov))
+cbind(res$beta - moe, res$beta, res$beta + moe)
+
+
+plot(Rsoil_rmv ~ Tsoil_rmv)
+
+xvec = seq(from = min(Tsoil_rmv), to = max(Tsoil_rmv), len = 100)
+xmat = cbind(1, xvec)
+lines(exp(xmat %*% beta_ini)~ xvec , type = "l", col = "red")
+lines(exp(xmat %*% beta)~ xvec , type = "l", col = "blue")
+beta3 = c(0.06985412, 0.06838407)
+lines(exp(xmat %*% beta3)~ xvec , type = "l", col = "green")
+legend("topleft", legend=c("glm1", "quasi-likelihood", "glm2"),
+       col=c("red", "blue", "green"), lty=1, cex=0.8)
+
+mu = exp(x %*% beta)
+plot((y - mu) / sqrt(mu)~y, main = "Residual Plot for quasi-likelihood",
+     ylab = "Pearson residuals")
+
+mu_ini = exp(x %*% beta_ini)
+plot((y - mu_ini) / mu_ini~y, main = "Residual Plot for GLM",
+     ylab = "Pearson residuals")
+```
+
